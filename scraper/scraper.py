@@ -85,40 +85,46 @@ class PlayByPlay():
 	def parse_play(self, row, awayteam, hometeam, gameid, quarter):
 		tds = row.find_all('td')
 		if len(tds) == 2:
-			d = self.parse_text(text=tds[1], scored=tds[2])
+			timestamp = tds[0].text
+			team = awayteam
+			score = None
+			d = self.parse_text(text=tds[1])
 		else: # MUST equal 6
 			timestamp = tds[0].text
 			if tds[1].text != ' ':
 				d = self.parse_text(text=tds[1], scored=tds[2])
 				team = awayteam
 			elif tds[5].text != ' ':
-				d= self.pare_text(text=tds[5], scores=tds[4])
+				d= self.parse_text(text=tds[5], scored=tds[4])
 				team = hometeam
-
 			else:
 				raise Exception('Row has no play')
-			score = tds[3]
-			d['team'] = team
-			d['time'] = timestamp
-			d['gameid'] = gameid
-			d['quarter'] = quarter
-			d['score'] = score
+			score = tds[3].text
+		d['team'] = team
+		d['time'] = timestamp
+		d['gameid'] = gameid
+		d['quarter'] = quarter
+		d['score'] = score
 		return d
 
 	# go through text (td element), determine what happened.  Return dict
-	def parse_text(self,text,scored):
-		pointchange = int(scored.text.replace('+',''))
+	def parse_text(self,text,scored = None):
+		if scored and (not scored.text == ' '): # short circuit if no scored provided
+			pointchange = int(scored.text.replace('+', ''))
+		else:
+			pointchange = 0
+
 		(twoPoint, threePoint, feet, assist, block, turnover, offRebound, defRebound, primaryPlayer,
 		 secondaryPlayer, action, offoul, freeThrow, foul) = tuple([None] * 14)
 		text = text.text.replace('\n', ' ')
-		print(text)
+		# print(text)
 		if "2-pt shot" in text:
-			print("twoPoint")
+			action = 'twoPoint'
 			if "misses" in text:
 				twoPoint = False
 				assist = False
 				primaryPlayer = text.split('misses 2-pt shot from')[0].replace(' ','')
-				if "feet" in text:
+				if " ft " in text:
 					feet = int(text.split('misses 2-pt shot from')[1].split('ft')[0].replace(' ',''))
 				else:
 					feet = 0 # this shot was at the rim
@@ -131,7 +137,7 @@ class PlayByPlay():
 				twoPoint = True
 				block = False
 				primaryPlayer = text.split('makes 2-pt shot from')[0].replace(' ','')
-				if "feet" in text:
+				if " ft " in text:
 					feet = int(text.split('makes 2-pt shot from')[1].split('ft')[0].replace(' ',''))
 				else:
 					feet = 0 # this shot was at the rim
@@ -146,7 +152,7 @@ class PlayByPlay():
 				threePoint = False
 				assist = False
 				primaryPlayer = text.split('misses 3-pt shot from')[0].replace(' ','')
-				if "feet" in text:
+				if " ft " in text:
 					feet = int(text.split('misses 3-pt shot from')[1].split('ft')[0].replace(' ',''))
 				else:
 					feet = 0 # this shot was at the rim
@@ -159,7 +165,7 @@ class PlayByPlay():
 				threePoint = True
 				block = False
 				primaryPlayer = text.split('makes 3-pt shot from')[0].replace(' ','')
-				if "feet" in text:
+				if " ft " in text:
 					feet = int(text.split('makes 3-pt shot from')[1].split('ft')[0].replace(' ',''))
 				else:
 					feet = 0 # this shot was at the rim
@@ -175,13 +181,13 @@ class PlayByPlay():
 			elif "makes" in text:
 				freeThrow = True
 				primaryPlayer = text.split(' misses free throw')[0].replace(' ','')
-		elif "Defensive rebounded by" in text:
+		elif "Defensive rebound by" in text:
 			defRebound = True
-			primaryPlayer = text.split('Defensive rebounded by ')[1].replace(' ','')
+			primaryPlayer = text.split('Defensive rebound by ')[1].replace(' ','')
 			action = 'defRebound'
-		elif "Offensive rebounded by" in text:
+		elif "Offensive rebound by" in text:
 			offRebound = True
-			primaryPlayer = text.split('Offensive rebounded by ')[1].replace(' ','')
+			primaryPlayer = text.split('Offensive rebound by ')[1].replace(' ','')
 			action = 'offRebound'
 		elif "Turnover by" in text:
 			action = turnover
@@ -197,18 +203,21 @@ class PlayByPlay():
 		elif "foul" in text:
 			action = "foul"
 			foul = text.split('foul')[0] # which foul spacifically?
-			primaryPlayer = text.split('by')[1].split('(').replace(' ','')
-			secondaryPlayer = text.splt('drawn by ')[1].replace(')','').replace(' ','')
+			primaryPlayer = text.split('by')[1].split('(')[0].replace(' ','')
+			secondaryPlayer = text.split('drawn by ')[1].replace(')','').replace(' ','')
 		elif "timeout" in text:
 			action = "timeout"
 		elif " enters the game for " in text:
 			action = "swap"
 			primaryPlayer,secondaryPlayer = tuple(text.split(' enters the game for '))
 		elif 'Jump ball' in text:
-			primaryPlayer = text.split('(')[1].split(' gains possession)'[0])
+			primaryPlayer = text.split('(')[1].split(' gains possession)')[0]
 			action = 'jump'
 		elif 'quarter' in text:
 			action = 'quarter'
+		else:
+			print(text)
+			raise Exception('Play unidentified')
 		return dict(
 			list(zip(
 				('twoPoint', 'threePoint', 'feet', 'assist', 'block', 'turnover', 'offRebound', 'defRebound', 'primaryPlayer',
@@ -225,3 +234,5 @@ if (__name__ == '__main__'):
 	P = PlayByPlay(term=None)
 	html = P.load_test_html()
 	q1,q2,q3,q4,ot1,ot2,ot3,ot4,ot5,ot6 = P.extract_rows(html)
+	rows = [P.parse_play(ele,'Boston','Chicago','idblah',1) for ele in q1]
+	print(rows)
